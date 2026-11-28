@@ -36,13 +36,13 @@ jobs:
           VITE_BASE: /mixer/
 
   tests:
-    name: Seating tests
+    name: Tests (seating, a whole event, sign-up import)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
       - uses: oven-sh/setup-bun@v2
       - name: Run tests
-        run: bun test supabase/functions/api web/src
+        run: bun test supabase/functions/mixer web/src
 
   backend:
     name: Backend function (lint, type-check)
@@ -55,4 +55,4 @@ jobs:
       - name: Lint
         run: deno lint supabase/functions scripts
       - name: Type-check
-        run: deno check supabase/functions/api/index.ts
+        run: deno check supabase/functions/mixer/index.ts
