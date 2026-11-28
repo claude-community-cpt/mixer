@@ -30,8 +30,12 @@ export function Qr({ url, size = 320 }: { url: string; size?: number }) {
 }
 
 export function RoomGrid({ tables }: { tables: RoomTable[] }) {
+  // On the big screen the whole room has to fit without scrolling: two rows
+  // of tables up to 14, three rows beyond that.
+  const n = tables.length;
+  const cols = n <= 8 ? Math.min(4, Math.max(2, n)) : Math.ceil(n / (n <= 14 ? 2 : 3));
   return (
-    <div className="room">
+    <div className={"room" + (cols > 4 ? " dense" : "")} style={{ "--cols": cols } as React.CSSProperties}>
       {tables.map((t) => (
         <section className="table" key={t.number}>
           <header>
@@ -40,7 +44,7 @@ export function RoomGrid({ tables }: { tables: RoomTable[] }) {
             <span className="count">{t.guests.length}</span>
           </header>
           <div className="chips">
-            {t.guests.map((g) => <span className={"chip" + (g.host ? " hosting" : "")} key={g.name}>{g.name}{g.host ? " · host" : ""}</span>)}
+            {t.guests.map((g) => <span className={"chip" + (g.host ? " hosting" : "")} key={g.name}>{g.name}{g.host ? <span className="hosttag"> · host</span> : ""}</span>)}
           </div>
         </section>
       ))}
@@ -109,7 +113,7 @@ export function Screen() {
         <>
           <div className="stack hero">
             <h2>Find your new table</h2>
-            <p className="sub">Your table number is on your phone. Voting on the {round.group.toLowerCase()} topics opens when you're seated.</p>
+            <p className="sub">Your table number is on your phone. Table hosts are in coral. Voting on the {round.group.toLowerCase()} topics opens when you're seated.</p>
           </div>
           <RoomGrid tables={view.tables} />
         </>
@@ -127,21 +131,18 @@ export function Screen() {
       )}
 
       {wheelOn && (
-        <div className="stack hero">
+        <Wheel round={round} spin={spin}>
           <h2>{topic ? "This round's topic" : round.spunAt ? "Spinning..." : round.top.length === 3 ? "The top three" : "The top topics"}</h2>
           {topic && <p className="chosen">{topic}</p>}
-          <Wheel round={round} spin={spin} />
-        </div>
+        </Wheel>
       )}
 
       {event.phase === "table" && spin === "done" && (
-        <>
-          <div className="stack hero">
-            <span className="label">At your tables</span>
-            <p className="chosen">{round.topic}</p>
-          </div>
-          <RoomGrid tables={view.tables} />
-        </>
+        <div className="stack hero center">
+          <span className="label">At your tables</span>
+          <p className="chosen">{round.topic}</p>
+          <p className="sub">Table hosts, start with a round of hellos. The room comes back together when the timer ends.</p>
+        </div>
       )}
 
       {event.phase === "room" && (

@@ -135,7 +135,7 @@ button:disabled { opacity: .4; cursor: default; pointer-events: none; }
 .hostcard ol { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; color: var(--ink-70); }
 .chip.hosting { background: var(--coral); color: var(--on-coral); }
 .chip.plain { background: var(--ivory-2); }
-.mine { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
+ul.mine { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
 .opt.pick { align-items: center; cursor: pointer; }
 .opt.pick:disabled { opacity: .5; }
 .opt.pick.mine { background: var(--coral-tint); }
@@ -169,7 +169,13 @@ button:disabled { opacity: .4; cursor: default; pointer-events: none; }
 .screen .label { font-size: .7em; }
 .screen .sub { font-size: 1em; }
 .timer.huge { font-size: 2.8em; line-height: 1; }
-.screen .room { grid-template-columns: repeat(auto-fit, minmax(15em, 1fr)); gap: 1em; flex: 1; align-content: start; }
+.screen .room { grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 1em; flex: 1; align-content: start; }
+.screen .room.dense { font-size: .78em; gap: .8em; }
+.screen .room.dense .table { padding: .8em; }
+.screen .room.dense .table header { gap: .5em; }
+.screen .room.dense .chips { gap: .3em; }
+.screen .room.dense .chip { padding: .2em .6em; }
+.screen .room.dense .hosttag { display: none; }
 .screen .table { padding: 1em; }
 .screen .table h3 { font-size: 1.05em; }
 .screen .badge { font-size: 1.3em; }
@@ -201,7 +207,10 @@ button:disabled { opacity: .4; cursor: default; pointer-events: none; }
 }
 
 /* the wheel over the top topics */
-.wheelwrap { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4vw; align-items: center; margin-top: .5em; }
+.wheelwrap { flex: 1; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4vw; align-items: center; }
+.wheelside { gap: .8em; }
+.wheelside h2 { font-size: 2.2em; }
+.wheelside .chosen { font-size: 2.6em; margin-bottom: .2em; }
 .wheelbox { position: relative; width: min(38vw, 56vh); aspect-ratio: 1; }
 .wheel { width: 100%; height: 100%; display: block; filter: drop-shadow(0 8px 24px rgba(20, 20, 19, .18)); }
 .wheel.turning { transition-property: transform; transition-timing-function: cubic-bezier(.12, .6, .12, 1); }
@@ -231,7 +240,12 @@ button:disabled { opacity: .4; cursor: default; pointer-events: none; }
   font-size: .8em; font-weight: 500;
 }
 .corner .qr { padding: 4px; border-radius: 8px; }
+/* A projector cannot scroll, so a wide screen never grows past the window. */
+@media (min-width: 721px) {
+  .screen { height: 100dvh; overflow: hidden; }
+}
 @media (max-width: 720px) {
+  .screen .room, .screen .room.dense { grid-template-columns: repeat(auto-fit, minmax(15em, 1fr)); }
   .lobby { grid-template-columns: minmax(0, 1fr); }
   .lobby .qr { width: min(70vw, 320px); }
   .corner { display: none; }

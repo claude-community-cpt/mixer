@@ -17,7 +17,7 @@ function slice(i: number, n: number): string {
  * The wheel over the top topics. The server picks the topic. The wheel only
  * turns to show it, landing with the chosen wedge under the pointer.
  */
-export function Wheel({ round, spin }: { round: RoundInfo; spin: "waiting" | "spinning" | "done" }) {
+export function Wheel({ round, spin, children }: { round: RoundInfo; spin: "waiting" | "spinning" | "done"; children?: React.ReactNode }) {
   const n = round.top.length;
   const chosen = round.top.findIndex((t) => t.id === round.topicId);
   const rest = chosen < 0 ? 0 : -((chosen + 0.5) * 360) / n;
@@ -45,15 +45,18 @@ export function Wheel({ round, spin }: { round: RoundInfo; spin: "waiting" | "sp
           <circle r="12" className="hub" />
         </svg>
       </div>
-      <ol className="legend">
-        {round.top.map((t, i) => (
-          <li key={t.id} className={spin === "done" && i === chosen ? "won" : spin === "done" ? "lost" : ""}>
-            <span className="badge" style={{ background: COLOURS[i % COLOURS.length] }}>{i + 1}</span>
-            <span className="legendtext">{t.text}</span>
-            {t.votes != null && <span className="count">{t.votes} {t.votes === 1 ? "vote" : "votes"}</span>}
-          </li>
-        ))}
-      </ol>
+      <div className="stack wheelside">
+        {children}
+        <ol className="legend">
+          {round.top.map((t, i) => (
+            <li key={t.id} className={spin === "done" && i === chosen ? "won" : spin === "done" ? "lost" : ""}>
+              <span className="badge" style={{ background: COLOURS[i % COLOURS.length] }}>{i + 1}</span>
+              <span className="legendtext">{t.text}</span>
+              {t.votes != null && <span className="count">{t.votes} {t.votes === 1 ? "vote" : "votes"}</span>}
+            </li>
+          ))}
+        </ol>
+      </div>
     </div>
   );
 }
