@@ -53,6 +53,7 @@ On the host page, "Sign-up list" takes the guest export from the event page as a
 - **Hosts** sign in with their email and the event PIN. Host emails are also kept only as a one-way hash, in the `hosts` table. Rows are added by hand in the database (the SQL is in `supabase/migrations/0003_event_flow.sql`), never from this repository. Five wrong tries lock the host page for five minutes.
 - **The keepsake card** is drawn on the guest's own phone. Nothing is uploaded.
 - **Afterwards**, "Delete all attendee data" on the host page removes guests, seats, votes, ratings and the sign-up list. Do it within 30 days of the event.
+- **Or it deletes itself.** Under "After the event" a host can pick a date, and the database deletes the same data early that morning with nobody signed in. Postgres has no built-in expiry for rows, so this is a small function (`purge_due_events`, in `supabase/migrations/0004_auto_delete.sql`) that pg_cron runs every hour. A Supabase project on the free plan is paused after about a week without use and a paused project runs no schedule, so pick a date within a few days of the event. If the project is asleep on the date, the delete runs within the hour of it being woken.
 
 Never commit a guest export, an attendee list, a host's contact details, a service role key or a host PIN to this repository.
 

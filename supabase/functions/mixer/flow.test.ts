@@ -73,3 +73,23 @@ test("pretend guests vote and rate by themselves in a practice event", async () 
   const me = await call("join", { code: practiceCode, name: "Dan" });
   expect((await call("view", { token: me.token })).table.number).toBeGreaterThan(0);
 });
+
+test("the automatic delete date can be set, changed and turned off", async () => {
+  const { db, call } = await setUp("ttl", "1234", "host@example.com");
+  const host = (action: string, body = {}) => call("host." + action, { code: "ttl", pin: "1234", email: "host@example.com", ...body });
+  const soon = new Date(Date.now() + 3 * 86400_000).toISOString();
+  let state = await host("setup", { purgeAt: soon });
+  expect(state.purgeAt).toBe(soon);
+  expect(db.data.events[0].purge_at).toBe(soon);
+  // Other settings leave the date alone.
+  state = await host("setup", { tableCount: 5 });
+  expect(state.purgeAt).toBe(soon);
+  await expect(host("setup", { purgeAt: new Date(Date.now() - 1000).toISOString() })).rejects.toThrow("future");
+  await expect(host("setup", { purgeAt: "soon" })).rejects.toThrow("Pick a date");
+  state = await host("setup", { purgeAt: null });
+  expect(state.purgeAt).toBeNull();
+  // Deleting by hand leaves nothing for the automatic delete to do.
+  await host("setup", { purgeAt: soon });
+  state = await host("wipe", { confirm: "DELETE" });
+  expect(state.purgeAt).toBeNull();
+});
