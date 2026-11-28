@@ -6,7 +6,23 @@ Guests scan a QR code, type a first name and get a table. The host advances roun
 
 A volunteer-run community tool. Not an Anthropic product.
 
-Live at https://table-mixer.vercel.app (the default event there is a demo).
+Live at https://claudecapetown.com/mixer/ (and, as a fallback, https://table-mixer.vercel.app).
+The event it opens by default is `VITE_EVENT_CODE` in `web/.env`; any other event opens with `?e=<code>` on the address.
+
+### Matching guests to the event sign-up
+
+On the host page, "Sign-up list" takes the approved guests' email addresses
+(pasted, or the guest export as a .csv). Once a list is loaded, the sign-in
+page also asks each guest for the email they registered with.
+
+No email address is stored. The server turns each address on the list into a
+keyed one-way fingerprint and keeps only that. When a guest joins, their
+address is fingerprinted the same way, compared, and thrown away. A guest who
+is not found is offered "Join anyway" and shows on the host page as "not on
+the sign-up list", so a typo never turns anyone away at the door. "Remove the
+list" on the host page deletes the fingerprints.
+
+Never commit a guest export or an attendee list to this repository.
 
 ## Pages
 
