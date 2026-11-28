@@ -87,6 +87,7 @@ button:disabled { opacity: .4; cursor: default; pointer-events: none; }
 .fine { color: var(--ink-55); font-size: .8rem; }
 .label { font-size: .69rem; letter-spacing: var(--tracking-caps); text-transform: uppercase; color: var(--ink-70); font-weight: 600; }
 .error { color: var(--bad); font-weight: 500; }
+.warnText { color: var(--bad); }
 .warn { background: var(--coral-tint); border-left: 4px solid var(--coral); padding: 10px 14px; border-radius: 8px; }
 .banner {
   position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 5;

@@ -66,30 +66,55 @@ export function Guest() {
 
 function Join({ code, onJoined }: { code: string; onJoined: (token: string) => void }) {
   const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  // Whether this event has a sign-up list to match against. Until we know, the email box stays hidden.
+  const [asksEmail, setAsksEmail] = useState(false);
+  const [notFound, setNotFound] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  useEffect(() => {
+    let on = true;
+    api<{ asksEmail: boolean }>("info", { code }).then((d) => { if (on) setAsksEmail(!!d.asksEmail); }).catch(() => {});
+    return () => { on = false; };
+  }, [code]);
+
+  async function join(anyway: boolean) {
     if (!name.trim()) return setError("Type a first name to join.");
+    if (asksEmail && !email.trim()) return setError("Type the email address you registered with.");
     setBusy(true);
     setError("");
     try {
-      const d = await api<{ token: string }>("join", { code, name, deviceId: deviceId() });
+      const d = await api<{ token: string }>("join", { code, name, deviceId: deviceId(), ...(asksEmail ? { email, anyway } : {}) });
       onJoined(d.token);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Something went wrong. Please try again.");
+      const e = err instanceof ApiError ? err : null;
+      // The server asks for an email if a sign-up list was loaded after this page opened.
+      if (e?.code === "bad_email") setAsksEmail(true);
+      setNotFound(e?.code === "email_not_found");
+      setError(e ? e.message : "Something went wrong. Please try again.");
     } finally {
       setBusy(false);
     }
   }
   return (
-    <form onSubmit={submit} className="stack">
+    <form onSubmit={(e) => { e.preventDefault(); join(false); }} className="stack">
       <h1 className="welcome"><small>Welcome to the</small> coffee morning</h1>
       <p className="sub">Pop in your first name and we'll give you a table.</p>
       <label className="label" htmlFor="name">First name</label>
       <input id="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={20} autoComplete="given-name" autoFocus />
+      {asksEmail && (
+        <>
+          <label className="label" htmlFor="email">Email you registered with</label>
+          <input id="email" type="email" inputMode="email" autoComplete="email" autoCapitalize="none" spellCheck={false} maxLength={254}
+            value={email} onChange={(e) => { setEmail(e.target.value); setNotFound(false); }} aria-describedby="email-note" />
+          <p className="fine" id="email-note">Only used to match you to your event sign-up. We don't store it and we won't email you.</p>
+        </>
+      )}
       {error && <p className="error" role="alert">{error}</p>}
       <button type="submit" className="primary big" disabled={busy}>{busy ? "Joining..." : "Get my table"}</button>
+      {notFound && (
+        <button type="button" className="big" disabled={busy} onClick={() => join(true)}>Join anyway and tell a host</button>
+      )}
       <p className="fine">Your first name is shown to other guests and on the big screen, and deleted after the event.</p>
     </form>
   );

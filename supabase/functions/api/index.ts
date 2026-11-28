@@ -4,6 +4,7 @@
 import "jsr:@supabase/functions-js@2/edge-runtime.d.ts";
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.45.4";
 import { assignRound, type GuestSeatHistory, metPairs, seatLatecomer } from "./assign.ts";
+import { emailFingerprint, extractEmails, normaliseEmail } from "./emails.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -24,6 +25,8 @@ const MAX_NAME = 20;
 const MAX_TEXT = 140;
 const MAX_GUESTS = 150;
 const MAX_PER_DEVICE = 3;
+const MAX_SIGNUPS = 2000;
+const MAX_SIGNUP_TEXT = 400_000;
 const PIN_TRIES = 5;
 const PIN_LOCK_MINUTES = 5;
 // Small on purpose: the host can rename or remove anyone from the host page.
@@ -139,7 +142,7 @@ async function seatNow(db: Db, ev: Row, guestId: string) {
   );
 }
 
-async function addGuestRow(db: Db, ev: Row, rawName: unknown, deviceId: string | null): Promise<Row> {
+async function addGuestRow(db: Db, ev: Row, rawName: unknown, deviceId: string | null, registered: boolean | null = null): Promise<Row> {
   const guests = await loadGuests(db, ev.id);
   if (guests.length >= MAX_GUESTS) throw new ApiError("full", "This event is full");
   if (deviceId && guests.filter((g) => g.device_id === deviceId).length >= MAX_PER_DEVICE) {
@@ -147,7 +150,7 @@ async function addGuestRow(db: Db, ev: Row, rawName: unknown, deviceId: string |
   }
   const name = await uniqueName(db, ev.id, checkName(rawName));
   const guest = (await must(
-    db.from("guests").insert({ event_id: ev.id, name, device_id: deviceId }).select("*").single(),
+    db.from("guests").insert({ event_id: ev.id, name, device_id: deviceId, registered }).select("*").single(),
   )) as Row;
   await seatNow(db, ev, guest.id);
   return guest;
@@ -186,12 +189,76 @@ function eventPublic(ev: Row) {
   };
 }
 
+// ---------- sign-up list ----------
+// See emails.ts and migration 0002: only fingerprints of addresses are kept.
+
+async function loadSignups(db: Db, eventId: string): Promise<Row[]> {
+  return (await must(db.from("registrations").select("email_hash, guest_id").eq("event_id", eventId).limit(MAX_SIGNUPS))) as Row[];
+}
+
+async function hasSignups(db: Db, eventId: string): Promise<boolean> {
+  const rows = (await must(db.from("registrations").select("email_hash").eq("event_id", eventId).limit(1))) as Row[];
+  return rows.length > 0;
+}
+
+async function setSignups(db: Db, ev: Row, body: Row) {
+  if (body.clear === true) {
+    await must(db.from("registrations").delete().eq("event_id", ev.id).select("email_hash"));
+    return;
+  }
+  const text = String(body.text ?? "");
+  if (text.length > MAX_SIGNUP_TEXT) throw new ApiError("bad_signups", "That list is too long. Paste only the email column.");
+  const emails = extractEmails(text);
+  if (!emails.length) throw new ApiError("bad_signups", "We couldn't find any email addresses in that");
+  if (emails.length > MAX_SIGNUPS) throw new ApiError("bad_signups", `Up to ${MAX_SIGNUPS} sign-ups`);
+  const wanted = new Set(await Promise.all(emails.map((e) => emailFingerprint(SERVICE_KEY, ev.id, e))));
+  // Replace the list, but keep rows that are still on it so "arrived" is not lost.
+  const existing = new Set((await loadSignups(db, ev.id)).map((r) => r.email_hash as string));
+  const gone = [...existing].filter((h) => !wanted.has(h));
+  const added = [...wanted].filter((h) => !existing.has(h)).map((email_hash) => ({ event_id: ev.id, email_hash }));
+  for (let i = 0; i < gone.length; i += 200) {
+    await must(db.from("registrations").delete().eq("event_id", ev.id).in("email_hash", gone.slice(i, i + 200)).select("email_hash"));
+  }
+  for (let i = 0; i < added.length; i += 500) {
+    await must(db.from("registrations").insert(added.slice(i, i + 500)).select("email_hash"));
+  }
+}
+
 // ---------- guest actions ----------
+
+// What the sign-in page needs before anyone has joined.
+async function info(db: Db, body: Row) {
+  const ev = await getEvent(db, body.code);
+  return { name: ev.name, asksEmail: await hasSignups(db, ev.id) };
+}
 
 async function join(db: Db, body: Row) {
   const ev = await getEvent(db, body.code);
   if (ev.phase === "finished") throw new ApiError("closed", "This event has finished");
-  const guest = await addGuestRow(db, ev, body.name, clean(body.deviceId, 64) || null);
+  // With a sign-up list loaded, guests give the address they registered with.
+  // It is fingerprinted, compared and thrown away: it is never stored or logged.
+  let registered: boolean | null = null;
+  let fingerprint = "";
+  if (await hasSignups(db, ev.id)) {
+    const email = normaliseEmail(body.email);
+    if (!email) throw new ApiError("bad_email", "Type the email address you registered with");
+    fingerprint = await emailFingerprint(SERVICE_KEY, ev.id, email);
+    const row = (await must(
+      db.from("registrations").select("email_hash").eq("event_id", ev.id).eq("email_hash", fingerprint).maybeSingle(),
+    )) as Row | null;
+    registered = !!row;
+    // A typo should not turn anyone away at the door: the page offers "join anyway",
+    // and the host sees who is not on the list.
+    if (!registered && body.anyway !== true) {
+      throw new ApiError("email_not_found", "We couldn't find that email on the sign-up list. Check it's the one you registered with.");
+    }
+  }
+  const guest = await addGuestRow(db, ev, body.name, clean(body.deviceId, 64) || null, registered);
+  if (registered) {
+    await must(
+      db.from("registrations").update({ guest_id: guest.id }).eq("event_id", ev.id).eq("email_hash", fingerprint).select("email_hash"),
+    );
+  }
   await notify(ev.code);
   return { token: guest.token, name: guest.name };
 }
@@ -339,14 +406,21 @@ async function hostState(db: Db, ev: Row) {
   const d = await roomData(db, ev);
   const polls = (await must(db.from("polls").select("*").eq("event_id", ev.id).order("position"))) as Row[];
   const seatNow = new Map(d.seats.map((s) => [s.guest_id, s.table_number]));
+  const signups = await loadSignups(db, ev.id);
   const out: Row = {
     event: eventPublic(ev),
+    signups: {
+      total: signups.length,
+      arrived: signups.filter((r) => r.guest_id).length,
+      notOnList: d.guests.filter((g) => g.registered === false).length,
+    },
     tables: d.tables.map((t) => ({ number: t.number, topic: t.topic, starter: t.starter, open: t.open })),
     polls: polls.map((p) => ({ position: p.position, question: p.question, options: p.options, allowText: p.allow_text })),
     guests: d.guests.map((g) => ({
       id: g.id,
       name: g.name,
       left: !!g.left_at,
+      registered: g.registered ?? null,
       pinnedTable: g.pinned_table,
       table: ev.phase === "round" || ev.phase === "poll" ? seatNow.get(g.id) ?? null : null,
     })),
@@ -488,6 +562,9 @@ async function host(db: Db, action: string, body: Row) {
     case "host.advance":
       await advance(db, ev, body);
       break;
+    case "host.setSignups":
+      await setSignups(db, ev, body);
+      break;
     case "host.addGuest":
       await addGuestRow(db, ev, body.name, null);
       break;
@@ -570,6 +647,7 @@ Deno.serve(async (req: Request) => {
     const db = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false } });
     let data: unknown;
     if (action === "join") data = await join(db, body);
+    else if (action === "info") data = await info(db, body);
     else if (action === "view") data = await view(db, body);
     else if (action === "answer") data = await answer(db, body);
     else if (action === "room") data = await room(db, body);

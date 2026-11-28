@@ -7,13 +7,14 @@ import { Brand } from "./Brand";
 
 type TableSetup = { number: number; topic: string; starter: string; open: boolean };
 type PollSetup = { question: string; options: string[]; allowText: boolean };
-type HostGuest = { id: string; name: string; left: boolean; pinnedTable: number | null; table: number | null };
+type HostGuest = { id: string; name: string; left: boolean; registered: boolean | null; pinnedTable: number | null; table: number | null };
 type HostView = {
   event: EventInfo;
   tables: TableSetup[];
   polls: (PollSetup & { position: number })[];
   guests: HostGuest[];
   room: RoomTable[];
+  signups: { total: number; arrived: number; notOnList: number };
   repeatPairs: number;
   poll: null | {
     question: string;
@@ -194,6 +195,7 @@ function Dashboard({ code, pin, view, setView, stale, signOut }: {
       )}
 
       <Guests view={view} busy={busy} act={act} />
+      <Signups view={view} busy={busy} act={act} />
       <Setup key={event.phase + event.round} view={view} busy={busy} act={act} startOpen={wide && event.phase === "lobby"} />
       <Danger busy={busy} act={act} />
     </main>
@@ -231,6 +233,7 @@ function Guests({ view, busy, act }: { view: HostView; busy: boolean; act: Act }
                   <strong>{g.name}</strong>
                   {g.table != null && !g.left && <span className="sub"> · table {g.table}</span>}
                   {g.pinnedTable != null && <span className="sub"> · kept at table {g.pinnedTable}</span>}
+                  {g.registered === false && <span className="warnText"> · not on the sign-up list</span>}
                   {g.left && <span className="sub"> · gone</span>}
                 </span>
                 <span className="chev" aria-hidden="true">{isOpen ? "−" : "+"}</span>
@@ -273,6 +276,41 @@ function Guests({ view, busy, act }: { view: HostView; busy: boolean; act: Act }
         {view.guests.length === 0 && <li className="sub">Nobody has checked in yet.</li>}
         {view.guests.length > 0 && shown.length === 0 && <li className="sub">No guest matches that.</li>}
       </ul>
+    </details>
+  );
+}
+
+function Signups({ view, busy, act }: { view: HostView; busy: boolean; act: Act }) {
+  const [text, setText] = useState("");
+  const [msg, setMsg] = useState("");
+  const { total, arrived, notOnList } = view.signups;
+  return (
+    <details className="panel">
+      <summary><h2>Sign-up list{total ? ` (${arrived} of ${total} arrived)` : ""}</h2></summary>
+      {total > 0 ? (
+        <p className="sub">
+          Guests are asked for the email they registered with. {arrived} of {total} sign-ups have arrived
+          {notOnList ? `, and ${notOnList} ${notOnList === 1 ? "guest is" : "guests are"} not on the list (marked under Guests)` : ""}.
+        </p>
+      ) : (
+        <p className="sub">No list loaded, so guests are only asked for a first name. Load the approved guests from the event sign-up to ask for an email and match it.</p>
+      )}
+      <label className="field">
+        <span className="label">{total ? "Replace the list" : "Paste the email addresses"}</span>
+        <textarea rows={4} value={text} placeholder="Paste email addresses, or the whole guest export. Anything that is not an email is ignored." onChange={(e) => { setText(e.target.value); setMsg(""); }} />
+      </label>
+      <label className="field">
+        <span className="label">Or choose the guest export (.csv)</span>
+        <input type="file" accept=".csv,.txt,text/csv,text/plain" onChange={async (e) => { const f = e.target.files?.[0]; if (f) { setText(await f.text()); setMsg(""); } e.target.value = ""; }} />
+      </label>
+      <div className="row">
+        <button type="button" className="primary" disabled={busy || !text.trim()} onClick={async () => { if (await act("setSignups", { text })) { setText(""); setMsg("List saved."); } }}>Save sign-up list</button>
+        {total > 0 && (
+          <button type="button" disabled={busy} onClick={async () => { if (window.confirm?.("Remove the sign-up list? Guests will no longer be asked for an email.") && (await act("setSignups", { clear: true }))) { setText(""); setMsg("List removed."); } }}>Remove the list</button>
+        )}
+        {msg && <span className="sub" role="status">{msg}</span>}
+      </div>
+      <p className="fine">The addresses are not kept. Each one is turned into a one-way fingerprint that can only answer "is this address on the list?", and the fingerprints go when you remove the list.</p>
     </details>
   );
 }
