@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, ApiError, eventCode, store, tableColor, type EventInfo, type RoundInfo, type Seat } from "./api";
 import { clock, useCountdown, useLive, useRefreshAtZero, useSpin } from "./useLive";
 import { Brand } from "./Brand";
@@ -313,7 +313,7 @@ function Topics({ view, token, refresh }: { view: GuestView; token: string; refr
         <form className="stack tight" onSubmit={send}>
           <label className="label" htmlFor="topic">Suggest a topic</label>
           <div className="row">
-            <input id="topic" value={text} maxLength={120} placeholder="A question for the room" onChange={(e) => setText(e.target.value)} />
+            <input id="topic" value={text} maxLength={120} placeholder="Your question" onChange={(e) => setText(e.target.value)} />
             <button type="submit" disabled={busy || text.trim().length < 5}>Send</button>
           </div>
           {error && <p className="error" role="alert">{error}</p>}
@@ -328,17 +328,36 @@ function Ballot({ vote, token }: { vote: NonNullable<GuestView["vote"]>; token: 
   const [mine, setMine] = useState<string[]>(vote.mine);
   const [error, setError] = useState("");
   const full = mine.length >= vote.max;
-  async function toggle(id: string) {
-    const next = mine.includes(id) ? mine.filter((x) => x !== id) : [...mine, id];
+  // One save runs at a time and always sends the latest picks, so quick taps
+  // cannot overtake each other on the way to the server.
+  const want = useRef(vote.mine);
+  const saved = useRef(vote.mine);
+  const saving = useRef(false);
+  async function save() {
+    if (saving.current) return;
+    saving.current = true;
+    try {
+      while (want.current !== saved.current) {
+        const sending = want.current;
+        await api("vote", { token, topicIds: sending });
+        saved.current = sending;
+      }
+    } catch (err) {
+      want.current = saved.current;
+      setMine(saved.current);
+      setError(err instanceof ApiError ? err.message : "That didn't save. Try again.");
+    } finally {
+      saving.current = false;
+    }
+  }
+  function toggle(id: string) {
+    const now = want.current;
+    const next = now.includes(id) ? now.filter((x) => x !== id) : [...now, id];
     if (next.length > vote.max) return;
+    want.current = next;
     setMine(next);
     setError("");
-    try {
-      await api("vote", { token, topicIds: next });
-    } catch (err) {
-      setMine(mine);
-      setError(err instanceof ApiError ? err.message : "That didn't save. Try again.");
-    }
+    save();
   }
   return (
     <>

@@ -94,7 +94,11 @@ function fraction(text: string): number {
 
 async function must<T>(p: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
   const { data, error } = await p;
-  if (error) throw new ApiError("db", error.message, 500);
+  if (error) {
+    // The database's own wording stays in the logs, never on someone's phone.
+    console.error("db:", error.message);
+    throw new ApiError("db", "Something went wrong. Please try again.", 500);
+  }
   return data as T;
 }
 
@@ -749,10 +753,16 @@ async function vote(db: Db, body: Row) {
   if (wanted.length > ev.votes_each) throw new ApiError("bad_vote", `Pick up to ${ev.votes_each}`);
   const options = new Set((await loadTopics(db, ev.id)).filter((t) => t.status === "approved" && t.grp === ev.round).map((t) => t.id as string));
   if (wanted.some((id) => !options.has(id))) throw new ApiError("bad_vote", "Pick from the list");
-  // Replace this guest's picks for the round.
-  await must(db.from("topic_votes").delete().eq("event_id", ev.id).eq("round", ev.round).eq("guest_id", guest.id).select("topic_id"));
+  // Replace this guest's picks for the round. Done as "drop the extras, then
+  // add what is missing" so two taps arriving together cannot trip each other.
+  const had = (await must(db.from("topic_votes").select("topic_id").eq("event_id", ev.id).eq("round", ev.round).eq("guest_id", guest.id))) as Row[];
+  const extra = had.map((v) => v.topic_id as string).filter((id) => !wanted.includes(id));
+  if (extra.length) {
+    await must(db.from("topic_votes").delete().eq("event_id", ev.id).eq("round", ev.round).eq("guest_id", guest.id).in("topic_id", extra).select("topic_id"));
+  }
   if (wanted.length) {
-    await must(db.from("topic_votes").insert(wanted.map((topic_id) => ({ event_id: ev.id, round: ev.round, guest_id: guest.id, topic_id }))).select("topic_id"));
+    const rows = wanted.map((topic_id) => ({ event_id: ev.id, round: ev.round, guest_id: guest.id, topic_id }));
+    await must(db.from("topic_votes").upsert(rows, { onConflict: "event_id,round,guest_id,topic_id", ignoreDuplicates: true }).select("topic_id"));
   }
   await notify(ev.code);
   return { ok: true, mine: wanted };

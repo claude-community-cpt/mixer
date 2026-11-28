@@ -78,6 +78,7 @@ export function Screen() {
   const { event, round } = view;
   const started = event.phase !== "lobby" && event.phase !== "finished";
   const timed = event.phase === "vote" || event.phase === "table" || event.phase === "room";
+  const wheelOn = event.phase === "wheel" || (event.phase === "table" && spin !== "done");
   // The topic stays hidden until the wheel has stopped.
   const topic = spin === "done" ? round.topic : null;
   return (
@@ -125,7 +126,7 @@ export function Screen() {
         </div>
       )}
 
-      {(event.phase === "wheel" || (event.phase === "table" && spin !== "done")) && (
+      {wheelOn && (
         <div className="stack hero">
           <h2>{topic ? "This round's topic" : round.spunAt ? "Spinning..." : round.top.length === 3 ? "The top three" : "The top topics"}</h2>
           {topic && <p className="chosen">{topic}</p>}
@@ -158,7 +159,7 @@ export function Screen() {
         </div>
       )}
 
-      {started && (
+      {started && !wheelOn && (
         <aside className="corner"><Qr url={url} size={96} /><span>Just arrived? Scan to join.</span></aside>
       )}
       {event.practice && <p className="practicetag">Practice event</p>}

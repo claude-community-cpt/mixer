@@ -371,7 +371,8 @@ function Guests({ view, busy, act }: { view: HostView; busy: boolean; act: Act }
   const tables = Array.from({ length: view.tableCount }, (_, i) => i + 1);
   const seated = view.event.phase !== "finished";
   const q = find.trim().toLowerCase();
-  const shown = q ? view.guests.filter((g) => g.name.toLowerCase().includes(q)) : view.guests;
+  const byName = useMemo(() => [...view.guests].sort((a, b) => a.name.localeCompare(b.name)), [view.guests]);
+  const shown = q ? byName.filter((g) => g.name.toLowerCase().includes(q)) : byName;
   return (
     <details className="panel" open={view.event.phase === "lobby"}>
       <summary><h2>Guests ({view.guests.filter((g) => !g.left).length})</h2></summary>
