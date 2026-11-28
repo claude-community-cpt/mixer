@@ -120,6 +120,9 @@ button:disabled { opacity: .4; cursor: default; pointer-events: none; }
   padding: 24px max(20px, env(safe-area-inset-right)) max(20px, env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
 }
 .guest footer { margin-top: auto; padding-top: 24px; color: var(--ink-55); font-size: .75rem; text-align: center; }
+/* The welcome title: a quiet lead-in line, then the name of the morning large on one line. */
+.welcome { font-size: clamp(2.25rem, 11vw, 3rem); line-height: 1.05; letter-spacing: -.02em; }
+.welcome small { display: block; margin-bottom: 6px; font-family: var(--sans); font-size: 1rem; font-weight: 500; line-height: 1.4; letter-spacing: 0; color: var(--ink-55); }
 .guest input { font-size: 1.1rem; padding: 13px 16px; }
 .bignum { font-weight: 600; font-size: 8.5rem; line-height: .95; font-variant-numeric: tabular-nums; letter-spacing: -.03em; }
 .steps { display: flex; gap: 6px; }
