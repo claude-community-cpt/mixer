@@ -86,3 +86,43 @@ export function clock(seconds: number | null) {
   const s = seconds % 60;
   return `${m}:${String(s).padStart(2, "0")}`;
 }
+
+/** How long the wheel turns for. Phones wait this long before showing the topic. */
+export const SPIN_MS = 5200;
+
+// Where the wheel is: not spun, turning, or settled on the topic.
+export function useSpin(spunAt: string | null | undefined, serverNow: string | undefined): "waiting" | "spinning" | "done" {
+  const [state, setState] = useState<"waiting" | "spinning" | "done">("waiting");
+  // How far this device's clock is from the server's. Kept in a ref, because
+  // serverNow changes on every refresh and only a new spin should restart the wait.
+  const offset = useRef(0);
+  if (serverNow) offset.current = new Date(serverNow).getTime() - Date.now();
+  const known = !!serverNow;
+  useEffect(() => {
+    if (!spunAt || !known) {
+      setState("waiting");
+      return;
+    }
+    const left = new Date(spunAt).getTime() + SPIN_MS - (Date.now() + offset.current);
+    if (left <= 0) {
+      setState("done");
+      return;
+    }
+    setState("spinning");
+    const t = setTimeout(() => setState("done"), left);
+    return () => clearTimeout(t);
+  }, [spunAt, known]);
+  return state;
+}
+
+// When a timer reaches zero the server moves the event on at the next request,
+// so ask straight away, and keep asking until the timer is replaced.
+export function useRefreshAtZero(left: number | null, refresh: () => void) {
+  const zero = left === 0;
+  useEffect(() => {
+    if (!zero) return;
+    refresh();
+    const t = setInterval(refresh, 2000);
+    return () => clearInterval(t);
+  }, [zero, refresh]);
+}

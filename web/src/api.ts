@@ -14,7 +14,7 @@ export class ApiError extends Error {
 export async function api<T = unknown>(action: string, body: Record<string, unknown> = {}): Promise<T> {
   let res: Response;
   try {
-    res = await fetch(`${URL_BASE}/functions/v1/api`, {
+    res = await fetch(`${URL_BASE}/functions/v1/mixer`, {
       method: "POST",
       headers: { "Content-Type": "application/json", apikey: KEY },
       body: JSON.stringify({ action, ...body }),
@@ -45,16 +45,41 @@ export function store(key: string, value?: string | null): string | null {
   }
 }
 
+export type Phase = "lobby" | "seating" | "vote" | "wheel" | "table" | "room" | "finished";
+
 export type EventInfo = {
   code: string;
   name: string;
-  phase: "lobby" | "round" | "poll" | "finished";
+  phase: Phase;
   round: number;
   totalRounds: number;
+  /** Minutes of table discussion each round. */
   roundMinutes: number;
-  roundEndsAt: string | null;
+  roomMinutes: number;
+  voteSeconds: number;
+  votesEach: number;
+  tableSize: number;
+  /** One name per round for its group of topics. */
+  groupNames: string[];
+  /** When the running timer ends (voting, table or room discussion). */
+  endsAt: string | null;
   feedbackUrl: string | null;
+  cardLine: string | null;
+  practice: boolean;
   serverNow: string;
 };
+
+export type RoundInfo = {
+  number: number;
+  group: string;
+  /** The top topics once voting has closed. Vote counts are only sent to the big screen and the host. */
+  top: { id: string; text: string; votes?: number }[];
+  topicId: string | null;
+  topic: string | null;
+  spunAt: string | null;
+};
+
+export type Seat = { name: string; host: boolean };
+export type RoomTable = { number: number; guests: Seat[] };
 
 export const tableColor = (n: number) => `var(--t${((n - 1) % 8) + 1})`;
