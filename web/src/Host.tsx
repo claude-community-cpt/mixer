@@ -18,6 +18,8 @@ type HostView = {
   tablesInUse: number;
   tablesWithoutHost: number;
   practiceCode: string | null;
+  purgeAt: string | null;
+  purgedAt: string | null;
   signups: { total: number; arrived: number; notOnList: number; offeredToHost: number; withDetails: number };
   guests: HostGuest[];
   room: RoomTable[];
@@ -589,11 +591,17 @@ function Practice({ view, busy, start }: { view: HostView; busy: boolean; start:
   );
 }
 
+/** A date as the date field wants it, in the host's own time zone. */
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const longDate = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+
 function Danger({ view, busy, act }: { view: HostView; busy: boolean; act: Act }) {
   const [word, setWord] = useState("");
   const [newPin, setNewPin] = useState("");
   const [msg, setMsg] = useState("");
   const practice = view.event.practice;
+  const [day, setDay] = useState(() => (view.purgeAt ? ymd(new Date(view.purgeAt)) : ""));
+  const tomorrow = ymd(new Date(Date.now() + 86400_000));
   return (
     <details className="panel">
       <summary><h2>{practice ? "Start again" : "After the event"}</h2></summary>
@@ -608,7 +616,19 @@ function Danger({ view, busy, act }: { view: HostView; busy: boolean; act: Act }
           <p className="sub">Deletes every guest, table, vote and rating, the sign-up list, topics guests suggested and the practice event. Prepared topics and settings stay. The ambassador agreement asks for attendee data to be deleted within 30 days of the event.</p>
           <div className="row">
             <input aria-label="Type DELETE to confirm" placeholder="Type DELETE to confirm" value={word} onChange={(e) => setWord(e.target.value)} />
-            <button type="button" className="danger" disabled={busy || word !== "DELETE"} onClick={async () => { if (await act("wipe", { confirm: "DELETE" })) { setWord(""); setMsg("All attendee data deleted."); } }}>Delete all attendee data</button>
+            <button type="button" className="danger" disabled={busy || word !== "DELETE"} onClick={async () => { if (await act("wipe", { confirm: "DELETE" })) { setWord(""); setDay(""); setMsg("All attendee data deleted."); } }}>Delete all attendee data</button>
+          </div>
+          <h3>Or have it delete itself</h3>
+          <p className="sub">Pick a date and the same data is deleted early that morning, with nobody signed in. A date within a few days of the event is the safest: the database goes to sleep after about a week without use, and then the delete waits until it is woken.</p>
+          {view.purgeAt && <p className="sub" role="status"><strong>On.</strong> Attendee data deletes itself on {longDate(view.purgeAt)}.</p>}
+          {!view.purgeAt && view.purgedAt && <p className="sub" role="status">Attendee data was deleted automatically on {longDate(view.purgedAt)}.</p>}
+          <div className="row">
+            <input type="date" aria-label="Date for the automatic delete" value={day} min={tomorrow} onChange={(e) => setDay(e.target.value)} />
+            <button type="button" disabled={busy || !day || day < tomorrow}
+              onClick={async () => { if (await act("setup", { purgeAt: new Date(`${day}T00:00:00`).toISOString() })) setMsg("The automatic delete is set."); }}>
+              {view.purgeAt ? "Change the date" : "Set the date"}
+            </button>
+            {view.purgeAt && <button type="button" disabled={busy} onClick={async () => { if (await act("setup", { purgeAt: null })) { setDay(""); setMsg("The automatic delete is off."); } }}>Turn it off</button>}
           </div>
         </>
       )}

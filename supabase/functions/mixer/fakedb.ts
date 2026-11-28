@@ -21,7 +21,7 @@ const SPECS: Record<string, TableSpec> = {
     defaults: () => ({
       id: id(), phase: "lobby", round: 0, total_rounds: 3, round_minutes: 25, round_ends_at: null, current_poll: null,
       pin_fail_count: 0, pin_locked_until: null, feedback_url: null, created_at: stamp(), table_size: 6, vote_seconds: 120,
-      room_minutes: 10, votes_each: 2, group_names: ["Serious", "Practical", "Fun"], card_line: null, practice_of: null,
+      room_minutes: 10, votes_each: 2, group_names: ["Serious", "Practical", "Fun"], card_line: null, practice_of: null, purge_at: null, purged_at: null,
     }),
     unique: [["id"], ["code"]],
   },

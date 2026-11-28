@@ -970,6 +970,8 @@ async function hostState(db: Db, evIn: Row, label: string) {
     tablesInUse: d.outTables.length,
     tablesWithoutHost: ev.phase === "lobby" ? 0 : d.outTables.filter((t) => !t.guests.some((g) => g.host)).length,
     practiceCode: practice?.code ?? null,
+    purgeAt: ev.purge_at ?? null,
+    purgedAt: ev.purged_at ?? null,
     signups: {
       total: signups.length,
       arrived: signups.filter((r) => r.guest_id).length,
@@ -1029,6 +1031,18 @@ async function setup(db: Db, ev: Row, body: Row) {
     patch.feedback_url = u || null;
   }
   if (body.cardLine != null) patch.card_line = clean(body.cardLine, 60) || null;
+  if (body.purgeAt !== undefined) {
+    // When the database deletes this event's attendee data by itself. Empty turns it off.
+    if (body.purgeAt === null || body.purgeAt === "") patch.purge_at = null;
+    else {
+      if (ev.practice_of) throw new ApiError("bad_setup", "A practice event is deleted with its real event");
+      const at = new Date(String(body.purgeAt)).getTime();
+      if (!Number.isFinite(at)) throw new ApiError("bad_setup", "Pick a date for the automatic delete");
+      if (at <= Date.now()) throw new ApiError("bad_setup", "The automatic delete must be in the future");
+      if (at > Date.now() + 366 * 86400_000) throw new ApiError("bad_setup", "The automatic delete must be within a year");
+      patch.purge_at = new Date(at).toISOString();
+    }
+  }
   if (Object.keys(patch).length) await must(db.from("events").update(patch).eq("id", ev.id).select("id"));
 
   if (body.tableCount != null) {
@@ -1248,6 +1262,8 @@ async function host(db: Db, action: string, body: Row) {
       await resetEvent(db, ev);
       await must(db.from("registrations").delete().eq("event_id", ev.id).select("email_hash"));
       await must(db.from("events").delete().eq("practice_of", ev.id).select("id"));
+      // Nothing is left for the automatic delete to do.
+      await must(db.from("events").update({ purge_at: null }).eq("id", ev.id).select("id"));
       break;
     }
     case "host.practice": {
