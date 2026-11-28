@@ -92,6 +92,14 @@ function fraction(text: string): number {
   return (h >>> 0) / 4294967296;
 }
 
+/** A fair pick of 0 to n-1. Numbers that would favour the low end are thrown away and drawn again. */
+function randomIndex(n: number): number {
+  const limit = Math.floor(0x100000000 / n) * n;
+  const draw = new Uint32Array(1);
+  do crypto.getRandomValues(draw); while (draw[0] >= limit);
+  return draw[0] % n;
+}
+
 async function must<T>(p: PromiseLike<{ data: T | null; error: { message: string } | null }>): Promise<T> {
   const { data, error } = await p;
   if (error) {
@@ -368,7 +376,7 @@ async function spin(db: Db, ev: Row) {
   const ids = (row?.top_ids as string[]) ?? [];
   if (!ids.length) throw new ApiError("no_topics", "There are no topics on the wheel");
   if (row!.spun_at) return;
-  const pick = ids[crypto.getRandomValues(new Uint32Array(1))[0] % ids.length];
+  const pick = ids[randomIndex(ids.length)];
   const topic = (await must(db.from("topics").select("text").eq("id", pick).maybeSingle())) as Row | null;
   await must(
     db.from("rounds").update({ topic_id: pick, topic_text: topic?.text ?? "", spun_at: new Date().toISOString() })
@@ -459,21 +467,20 @@ async function addBots(db: Db, ev: Row, wanted: unknown) {
   const guests = await loadGuests(db, ev.id);
   if (guests.length + count > MAX_GUESTS) throw new ApiError("full", "This event is full");
   const taken = new Set(guests.map((g) => String(g.name).toLowerCase()));
-  const rand = () => crypto.getRandomValues(new Uint32Array(1))[0] / 4294967296;
   const rows: Row[] = [];
   for (let i = 0; i < count; i++) {
-    const base = BOT_NAMES[Math.floor(rand() * BOT_NAMES.length)];
+    const base = BOT_NAMES[randomIndex(BOT_NAMES.length)];
     let name = base;
     for (let n = 2; taken.has(name.toLowerCase()); n++) name = `${base} ${n}`;
     taken.add(name.toLowerCase());
-    const x = rand();
+    const x = randomIndex(10);
     rows.push({
       event_id: ev.id,
       name,
       bot: true,
-      experience: x < 0.6 ? "daily" : x < 0.8 ? "regular" : x < 0.9 ? "occasional" : "new",
-      will_host: rand() < 0.4,
-      role_group: BOT_ROLES[Math.floor(rand() * BOT_ROLES.length)],
+      experience: x < 6 ? "daily" : x < 8 ? "regular" : x < 9 ? "occasional" : "new",
+      will_host: randomIndex(10) < 4,
+      role_group: BOT_ROLES[randomIndex(BOT_ROLES.length)],
     });
   }
   const added = (await must(db.from("guests").insert(rows).select("*"))) as Row[];
